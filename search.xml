@@ -5,10 +5,10 @@
     
     <entry>
       <title>關於我</title>
-      <link href="/2023/12/14/%E9%97%9C%E6%96%BC%E6%88%91/"/>
-      <url>/2023/12/14/%E9%97%9C%E6%96%BC%E6%88%91/</url>
+      <link href="/2023-12-14/%E9%97%9C%E6%96%BC%E6%88%91/"/>
+      <url>/2023-12-14/%E9%97%9C%E6%96%BC%E6%88%91/</url>
       
-        <content type="html"><![CDATA[<p>本人為一名年資約 3 年的軟體工程師，現年 27 歲<br>職業生涯中主要以前端為主，大約兩年半左右</p><ul><li>Unity3D、Cocos 2d-X</li><li>C#、Lua、C++</li></ul><p>後端經驗約半年多</p><ul><li>Docker、K8S、Nginx</li><li>Go、SQL</li></ul><p>目前狀態為待業中，職場意向主要為 SRE&#x2F;DevOps<br>本站主要會更新一些 POC 相關的內容，並記錄一些開發上踩坑、填坑的過程</p>]]></content>
+        <content type="html"><![CDATA[<p>本人為一名年資約 3 年的軟體工程師，現年 27 歲<br>職業生涯中主要以前端為主，大約兩年半左右  </p><ul><li>Unity3D、Cocos 2d-X</li><li>C#、Lua、C++</li></ul><p>後端經驗約半年多</p><ul><li>Docker、K8S、Nginx</li><li>Go、SQL</li></ul><p>目前狀態為待業中，職場意向主要為 SRE&#x2F;DevOps<br>本站主要會更新一些 POC 相關的內容，並記錄一些開發上踩坑、填坑的過程</p>]]></content>
       
       
       
@@ -17,6 +17,25 @@
             <tag> about me </tag>
             
         </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
+      <title>排隊系統研究</title>
+      <link href="/2023-12-14/%E6%8E%92%E9%9A%8A%E7%B3%BB%E7%B5%B1%E7%A0%94%E7%A9%B6/"/>
+      <url>/2023-12-14/%E6%8E%92%E9%9A%8A%E7%B3%BB%E7%B5%B1%E7%A0%94%E7%A9%B6/</url>
+      
+        <content type="html"><![CDATA[<h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>在我待過的公司，開發及維運基本上都是結合在一起的，開發人員同時也是維運人員，但大部分工程師比較倚重於開發這一塊，在維運的部分基本上都是見招拆招，因此很常發生東西上線後，大量 Request 或是某個 Scheduler 導致資源耗盡。</p><p>除了測試上不夠完整、人為疏失之外，不外乎沒有足夠的監控機制及事先評估，但更多的是架構上的限制，大量的 monolith service 導致擴充困難。</p><p>在職時沒有機會著手改善這些問題(當時主要負責前端)，因此我想試想看看如果今天是我碰到該如何來進行改善。</p><h1 id="評估系統容量"><a href="#評估系統容量" class="headerlink" title="評估系統容量"></a>評估系統容量</h1><p>通常性能評估皆以有狀態服務作為主要考量的對象，因此不外乎就是 DB、Cache 本身的容量上限，以及業務的時間複雜度等等。</p><p>應將注意力放在玩家的集中性行為：</p><ul><li>伺服器開放階段：登入、創角、大量的初始化作業</li><li>新活動上線：密集的讀寫其中特定資源</li><li>重複性操作：抽卡、衝裝備</li></ul><p>針對以上情況，普遍使用以下幾種解法：</p><ul><li>排隊、預先創角、非同步模式</li><li>使用 memorycache 讀取操作</li><li>業務邏輯優化、提供更大的批次操作選項</li></ul><h1 id="排隊系統設計"><a href="#排隊系統設計" class="headerlink" title="排隊系統設計"></a>排隊系統設計</h1><p>排隊可以有各種排法，我這邊簡單分成三大類：</p><ul><li>長連線：連線到有狀態伺服器，並使用 ping&#x2F;pong 來檢查是否還在排隊</li><li>長輪詢：取得 Token、排隊編號及初始狀態，並於一段時間後回應新狀態</li><li>SSE：基本上同上，但排隊狀態使用 <a href="https://en.wikipedia.org/wiki/Server-sent_events">Server-sent events</a> 更新狀態，可減少 Client 請求數量</li></ul><p>以上幾種各有優劣，這邊就以長連線及 SSE 來分析</p><h2 id="長連線"><a href="#長連線" class="headerlink" title="長連線"></a>長連線</h2><p>優點</p><ul><li>在現有架構上添加可能較為方便</li><li>能及早得知使用者離開排隊隊伍</li><li>能隨時切換是否啟用排隊機制</li></ul><p>缺點</p><ul><li>不易擴充、添加列隊服務</li><li>較耗費系統資源、連線數有一定限制</li><li>有可能影響其他已完成排隊的使用者</li></ul><h2 id="SSE"><a href="#SSE" class="headerlink" title="SSE"></a>SSE</h2><p>優點</p><ul><li>基本上是無狀態服務，較容易擴展容量</li><li>相對節省資源，可以像長連線一樣通知排隊進度</li><li>不容易受到短暫斷線的影響</li></ul><p>缺點</p><ul><li>需要額外實作一套機制、並視情況切換是否須排隊</li><li>無法提前得知使用者離開排隊、導致更長的排隊時間</li></ul><h1 id="嘗試做一套排隊系統"><a href="#嘗試做一套排隊系統" class="headerlink" title="嘗試做一套排隊系統"></a>嘗試做一套排隊系統</h1><p>綜上所述，基本上會使用 SSE 的方式來設計一套做法，主要有以下實作需求</p><h2 id="關鍵資源"><a href="#關鍵資源" class="headerlink" title="關鍵資源"></a>關鍵資源</h2><ul><li>基本設定<ul><li>排隊開關</li><li>並行限制</li><li>隊伍上限</li></ul></li><li>業務模擬<ul><li>抽號碼牌</li><li>登入系統</li><li>購物結帳</li></ul></li></ul><h2 id="排隊專用服務"><a href="#排隊專用服務" class="headerlink" title="排隊專用服務"></a>排隊專用服務</h2><ul><li>基本設定<ul><li>同上</li></ul></li><li>排隊服務<ul><li>列隊狀態查詢(通知)</li><li>列隊完成通知</li><li>通行 Token 簽發</li></ul></li></ul><h2 id="額外功能"><a href="#額外功能" class="headerlink" title="額外功能"></a>額外功能</h2><ul><li>監控<ul><li>基本性能指標</li><li>排隊狀態指標</li></ul></li></ul>]]></content>
+      
+      
+      <categories>
+          
+          <category> 排隊服務 </category>
+          
+      </categories>
+      
       
     </entry>
     

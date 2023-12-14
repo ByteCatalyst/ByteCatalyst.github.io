@@ -1,0 +1,89 @@
+<!DOCTYPE html><html class="appearance-auto" lang="zh-TW"><head><meta charset="UTF-8"><title>排隊系統研究</title><meta name="description" content="卓越，是一種習慣"><meta name="viewport" content="width=device-width, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, initial-scale=1"><!-- Google Analytics --><!-- End Google Analytics -->
+<!-- Baidu Analytics --><!-- End Baidu Analytics --><link rel="icon" href="/images/favicon.ico"><link rel="stylesheet" href="/style/common/bulma.css"><link rel="stylesheet" href="/style/base.css"><link rel="stylesheet" href="/style/common/helper.css"><script src="/js/common.js"></script><link rel="stylesheet" href="/style/post.css"><link rel="stylesheet" href="/style/themes/highlight-theme-light.css"><link rel="stylesheet" href="/style/common/jquery.fancybox.min.css"><script src="/js/highlight.pack.js"></script><meta name="description" content="前言在我待過的公司，開發及維運基本上都是結合在一起的，開發人員同時也是維運人員，但大部分工程師比較倚重於開發這一塊，在維運的部分基本上都是見招拆招，因此很常發生東西上線後，大量 Request 或是某個 Scheduler 導致資源耗盡。
+除了測試上不夠完整、人為疏失之外，不外乎沒有足夠的監控機制及事先評估，但更多的是架構上的限制，大量的 monolith service 導致擴充困難。
+在職時沒有機會著手改善這些問題(當時主要負責前端)，因此我想試想看看如果今天是我碰到該如何來進行改善。
+評估系統容量通常性能評估皆以有狀態服務作為主要考量的對象，因此不外乎就是 DB、Cache 本身的容量上限，以及業務的時間複雜度等等。
+應將注意力放在玩家的集中性行為：
+
+伺服器開放階段：登入、創角、大量的初始化作業
+新.."><meta name="generator" content="Hexo 6.3.0"></head><body class="is-flex is-flex-direction-column"><header class="header-widget is-flex-shrink-0 is-hidden-mobile"><div class="container is-fullhd is-flex is-justify-content-space-between is-align-items-center is-full-height"><section class="is-hidden-mobile is-flex-shrink-0"><h2><a href="/">Rong's blog</a></h2></section><h3 class="is-hidden-mobile is-family-serif is-full-height is-flex is-align-items-center is-flex-shrink-0"><div class="is-full-height" id="postTopic"><p class="is-full-height is-flex-shrink-0 is-flex is-align-items-center is-justify-content-center">排隊系統研究</p><p class="is-full-height is-flex-shrink-0 is-flex is-align-items-center is-justify-content-center">點擊返回頂部</p></div></h3><aside class="is-flex-shrink-0"><h3 class="is-inline-block"><a href="/">首頁</a></h3><h3 class="is-inline-block"><a href="/2023-12-14/%E9%97%9C%E6%96%BC%E6%88%91/">關於</a></h3><h3 class="is-inline-block"><a href="/archives">歸檔</a></h3></aside></div></header><header class="is-flex header-widget is-flex-shrink-0 is-align-items-center is-justify-content-center is-hidden-tablet"><h3 class="is-inline-block"><a href="/">首頁</a></h3><h3 class="is-inline-block"><a href="/2023-12-14/%E9%97%9C%E6%96%BC%E6%88%91/">關於</a></h3><h3 class="is-inline-block"><a href="/archives">歸檔</a></h3></header><main><main class="container is-max-widescreen content section post-page pt-4 px-4"><div class="columns is-flex-desktop is-justify-content-center is-flex-direction-row-reverse"><div class="column is-3 is-hidden-mobile"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%89%8D%E8%A8%80"><span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E8%A9%95%E4%BC%B0%E7%B3%BB%E7%B5%B1%E5%AE%B9%E9%87%8F"><span class="toc-text">評估系統容量</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%8E%92%E9%9A%8A%E7%B3%BB%E7%B5%B1%E8%A8%AD%E8%A8%88"><span class="toc-text">排隊系統設計</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%95%B7%E9%80%A3%E7%B7%9A"><span class="toc-text">長連線</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#SSE"><span class="toc-text">SSE</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%98%97%E8%A9%A6%E5%81%9A%E4%B8%80%E5%A5%97%E6%8E%92%E9%9A%8A%E7%B3%BB%E7%B5%B1"><span class="toc-text">嘗試做一套排隊系統</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%97%9C%E9%8D%B5%E8%B3%87%E6%BA%90"><span class="toc-text">關鍵資源</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8E%92%E9%9A%8A%E5%B0%88%E7%94%A8%E6%9C%8D%E5%8B%99"><span class="toc-text">排隊專用服務</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%A1%8D%E5%A4%96%E5%8A%9F%E8%83%BD"><span class="toc-text">額外功能</span></a></li></ol></li></ol></div><div class="column is-9"><header class="my-4"></header><h1 class="mt-0 mb-1 is-family-serif" id="postTitle">排隊系統研究</h1><time class="has-text-grey" datetime="2023-12-14T01:42:17.413Z">2023-12-14</time><article class="mt-2 post-content"><h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>在我待過的公司，開發及維運基本上都是結合在一起的，開發人員同時也是維運人員，但大部分工程師比較倚重於開發這一塊，在維運的部分基本上都是見招拆招，因此很常發生東西上線後，大量 Request 或是某個 Scheduler 導致資源耗盡。</p>
+<p>除了測試上不夠完整、人為疏失之外，不外乎沒有足夠的監控機制及事先評估，但更多的是架構上的限制，大量的 monolith service 導致擴充困難。</p>
+<p>在職時沒有機會著手改善這些問題(當時主要負責前端)，因此我想試想看看如果今天是我碰到該如何來進行改善。</p>
+<h1 id="評估系統容量"><a href="#評估系統容量" class="headerlink" title="評估系統容量"></a>評估系統容量</h1><p>通常性能評估皆以有狀態服務作為主要考量的對象，因此不外乎就是 DB、Cache 本身的容量上限，以及業務的時間複雜度等等。</p>
+<p>應將注意力放在玩家的集中性行為：</p>
+<ul>
+<li>伺服器開放階段：登入、創角、大量的初始化作業</li>
+<li>新活動上線：密集的讀寫其中特定資源</li>
+<li>重複性操作：抽卡、衝裝備</li>
+</ul>
+<p>針對以上情況，普遍使用以下幾種解法：</p>
+<ul>
+<li>排隊、預先創角、非同步模式</li>
+<li>使用 memorycache 讀取操作</li>
+<li>業務邏輯優化、提供更大的批次操作選項</li>
+</ul>
+<h1 id="排隊系統設計"><a href="#排隊系統設計" class="headerlink" title="排隊系統設計"></a>排隊系統設計</h1><p>排隊可以有各種排法，我這邊簡單分成三大類：</p>
+<ul>
+<li>長連線：連線到有狀態伺服器，並使用 ping&#x2F;pong 來檢查是否還在排隊</li>
+<li>長輪詢：取得 Token、排隊編號及初始狀態，並於一段時間後回應新狀態</li>
+<li>SSE：基本上同上，但排隊狀態使用 <a target="_blank" rel="noopener" href="https://en.wikipedia.org/wiki/Server-sent_events">Server-sent events</a> 更新狀態，可減少 Client 請求數量</li>
+</ul>
+<p>以上幾種各有優劣，這邊就以長連線及 SSE 來分析</p>
+<h2 id="長連線"><a href="#長連線" class="headerlink" title="長連線"></a>長連線</h2><p>優點</p>
+<ul>
+<li>在現有架構上添加可能較為方便</li>
+<li>能及早得知使用者離開排隊隊伍</li>
+<li>能隨時切換是否啟用排隊機制</li>
+</ul>
+<p>缺點</p>
+<ul>
+<li>不易擴充、添加列隊服務</li>
+<li>較耗費系統資源、連線數有一定限制</li>
+<li>有可能影響其他已完成排隊的使用者</li>
+</ul>
+<h2 id="SSE"><a href="#SSE" class="headerlink" title="SSE"></a>SSE</h2><p>優點</p>
+<ul>
+<li>基本上是無狀態服務，較容易擴展容量</li>
+<li>相對節省資源，可以像長連線一樣通知排隊進度</li>
+<li>不容易受到短暫斷線的影響</li>
+</ul>
+<p>缺點</p>
+<ul>
+<li>需要額外實作一套機制、並視情況切換是否須排隊</li>
+<li>無法提前得知使用者離開排隊、導致更長的排隊時間</li>
+</ul>
+<h1 id="嘗試做一套排隊系統"><a href="#嘗試做一套排隊系統" class="headerlink" title="嘗試做一套排隊系統"></a>嘗試做一套排隊系統</h1><p>綜上所述，基本上會使用 SSE 的方式來設計一套做法，主要有以下實作需求</p>
+<h2 id="關鍵資源"><a href="#關鍵資源" class="headerlink" title="關鍵資源"></a>關鍵資源</h2><ul>
+<li>基本設定<ul>
+<li>排隊開關</li>
+<li>並行限制</li>
+<li>隊伍上限</li>
+</ul>
+</li>
+<li>業務模擬<ul>
+<li>抽號碼牌</li>
+<li>登入系統</li>
+<li>購物結帳</li>
+</ul>
+</li>
+</ul>
+<h2 id="排隊專用服務"><a href="#排隊專用服務" class="headerlink" title="排隊專用服務"></a>排隊專用服務</h2><ul>
+<li>基本設定<ul>
+<li>同上</li>
+</ul>
+</li>
+<li>排隊服務<ul>
+<li>列隊狀態查詢(通知)</li>
+<li>列隊完成通知</li>
+<li>通行 Token 簽發</li>
+</ul>
+</li>
+</ul>
+<h2 id="額外功能"><a href="#額外功能" class="headerlink" title="額外功能"></a>額外功能</h2><ul>
+<li>監控<ul>
+<li>基本性能指標</li>
+<li>排隊狀態指標</li>
+</ul>
+</li>
+</ul>
+</article><section class="jump-container is-flex is-justify-content-space-between my-6"><!-- em is empty placeholder--><a class="button is-default" href="/2023-12-14/%E9%97%9C%E6%96%BC%E6%88%91/" title="關於我"><i class="iconfont icon-prev mr-2 has-text-grey"></i><span class="has-text-weight-semibold">上一頁: 關於我</span></a></section><article class="mt-6 comment-container"><script async repo="ByteCatalyst/ByteCatalyst.github.io" src="https://utteranc.es/client.js" issue-term="pathname" theme="preferred-color-scheme"></script></article></div></div></main></main><footer class="is-flex is-flex-direction-column is-align-items-center is-flex-shrink-0 is-family-serif"><section class="sns-container"><!-- Github--><a title="github" target="_blank" rel="noopener nofollow" href="//github.com/ByteCatalyst"><i class="iconfont icon-github"></i></a><!-- Ins--><!-- RSS--><!-- 知乎--><!-- 领英--><!-- 脸书--></section><p><span>Copyright ©</span><span> Rong 2023</span></p><div class="is-flex is-justify-content-center is-flex-wrap-wrap"><p>Powered by Hexo &verbar;&nbsp;</p><p class="is-flex is-justify-content-center"><a title="Hexo theme author" target="_blank" rel="noopener" href="//github.com/haojen">Theme by Haojen&nbsp;</a></p><div style="margin-top: 2px"><a class="github-button" title="github-button" target="_blank" rel="noopener" href="https://github.com/haojen/hexo-theme-Claudia" data-color-scheme="no-preference: light; light: light; dark: dark;" data-show-count="true"></a></div></div><div><span></span></div></footer><script async defer src="https://buttons.github.io/buttons.js"></script><script src="/js/jquery-3.6.1.min.js"></script><script src="/js/jquery-fancybox.min.js"></script><script src="/js/img_zoom.js"></script><script src="/js/post.js"></script></body></html>
