@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search> 
+  
+  
+    
+    <entry>
+      <title>關於我</title>
+      <link href="/2023/12/14/%E9%97%9C%E6%96%BC%E6%88%91/"/>
+      <url>/2023/12/14/%E9%97%9C%E6%96%BC%E6%88%91/</url>
+      
+        <content type="html"><![CDATA[<p>本人為一名年資約 3 年的軟體工程師，現年 27 歲<br>職業生涯中主要以前端為主，大約兩年半左右</p><ul><li>Unity3D、Cocos 2d-X</li><li>C#、Lua、C++</li></ul><p>後端經驗約半年多</p><ul><li>Docker、K8S、Nginx</li><li>Go、SQL</li></ul><p>目前狀態為待業中，職場意向主要為 SRE&#x2F;DevOps<br>本站主要會更新一些 POC 相關的內容，並記錄一些開發上踩坑、填坑的過程</p>]]></content>
+      
+      
+      
+        <tags>
+            
+            <tag> about me </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+  
+  
+</search>
